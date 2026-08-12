@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Aegis Traffic AI - Traffic Vision Pro</title>
+    
+    <!-- UI Dependencies -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;family=Montserrat:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    
+    <!-- AI Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-container": "#38bdf8",
+                        "on-primary-container": "#004965",
+                        "background": "#0b1326",
+                        "surface-container-lowest": "#060e20",
+                        "outline": "#87929a",
+                        "primary": "#8ed5ff",
+                        "on-background": "#dae2fd",
+                        "secondary": "#4edea3",
+                        "error": "#ffb4ab",
+                        "on-surface": "#dae2fd",
+                        "on-surface-variant": "#bdc8d1"
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: theme('colors.background'); color: theme('colors.on-background'); font-family: 'Montserrat', sans-serif; }
+        .glass-panel {
+            background-color: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .neon-glow { box-shadow: 0 0 15px rgba(56, 189, 248, 0.2); }
+        .text-glow { text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
+        
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.3); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(56,189,248,0.6); }
+
+        /* Nav active state */
+        .nav-active { background-color: rgba(56,189,248,0.1); color: #8ed5ff; box-shadow: 0 0 15px rgba(56,189,248,0.2); }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+    <!-- SideNavBar -->
+    <nav class="hidden md:flex flex-col py-6 gap-1 bg-[#171f33] border-r border-white/5 w-[280px] h-screen shrink-0">
+        <div class="px-4 mb-6">
+            <h1 class="font-bold text-3xl text-primary tracking-tight">System Core</h1>
+            <p class="text-xs text-on-surface-variant mt-2 flex items-center gap-2 font-mono">
+                <span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+                AI Node: Active
+            </p>
+        </div>
+        <div class="flex flex-col gap-2 px-2 font-mono text-sm">
+            <!-- Tombol Navigasi Live Stream -->
+            <a id="nav-live" class="nav-active flex items-center gap-4 rounded-lg px-4 py-3 transition-colors cursor-pointer" onclick="switchView('live')">
+                <span class="material-symbols-outlined">videocam</span>
+                Live Stream
+            </a>
+            <!-- Tombol Navigasi Upload Gambar -->
+            <a id="nav-image" class="text-on-surface-variant flex items-center gap-4 px-4 py-3 hover:bg-white/5 hover:text-on-surface transition-colors cursor-pointer rounded-lg" onclick="switchView('image')">
+                <span class="material-symbols-outlined">image</span>
+                Image Analysis
+            </a>
+            <a class="flex items-center gap-4 text-on-surface-variant px-4 py-3 hover:bg-white/5 hover:text-on-surface transition-colors cursor-pointer rounded-lg">
+                <span class="material-symbols-outlined">analytics</span>
+                Telemetry
+            </a>
+            <a class="flex items-center gap-4 text-on-surface-variant px-4 py-3 hover:bg-white/5 hover:text-on-surface transition-colors cursor-pointer rounded-lg">
+                <span class="material-symbols-outlined">settings</span>
+                Settings
+            </a>
+        </div>
+    </nav>
+    
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <!-- TopAppBar -->
+        <header class="flex justify-between items-center w-full px-6 h-16 bg-[#0b1326]/70 backdrop-blur-xl border-b border-white/10 shrink-0 z-50">
+            <div class="flex items-center gap-4">
+                <h2 class="text-xl font-bold text-primary tracking-tight md:hidden">Aegis AI</h2>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 glass-panel rounded-full px-4 py-1 border-primary/30 neon-glow" id="status-ai">
+                    <span class="w-3 h-3 rounded-full bg-error animate-pulse shadow-[0_0_8px_theme('colors.error')]"></span>
+                    <span class="text-xs font-mono text-on-surface tracking-wider">INITIALIZING AI...</span>
+                </div>
+                <img class="w-8 h-8 rounded-full border border-white/10 object-cover ml-2" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqylBUa25Gq33Plua4oJQHgfbl6NkWO2gw6hurxTmoA3_vRk-q2SSO0Hrxj1lVMcQIEYDxYcDIYwBKfJuXBY1LEdY6U3IkZRcL5YZ0Xzm1FSLhdx_j1anC2u3Ut7mrIwHfPUogd1-uQ9BhCFLt41t7pUv87hjKBhkJT20h4otj5wsJB2C0Us4p0djhsPGio6AoDsdP3uBzLnRimT6zeQ4HcFXhcMhnSHiQjWhwVNaEtykx0PfSauRUHg" alt="Avatar"/>
+            </div>
+        </header>
+        
+        <main class="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar relative">
+            
+            <!-- ============================== -->
+            <!-- VIEW 1: LIVE STREAM MONITORING -->
+            <!-- ============================== -->
+            <div id="view-live" class="block">
+                <div class="mb-6">
+                    <h2 class="font-bold text-4xl text-on-surface tracking-tight mb-1">Traffic Vision Pro</h2>
+                    <p class="text-lg text-on-surface-variant">Real-time HD Monitoring</p>
+                </div>
+                
+                <!-- Stream Control -->
+                <div class="glass-panel rounded-xl p-4 mb-6 flex flex-col sm:flex-row gap-3 items-center">
+                    <div class="relative flex-1 w-full">
+                        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">link</span>
+                        <input class="w-full bg-surface-container-lowest border border-white/10 rounded-lg py-2 pl-10 pr-3 text-on-surface font-mono text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none" id="stream-url-input" placeholder="Masukkan link stream HLS (.m3u8) di sini..." type="text"/>
+                    </div>
+                    <button class="w-full sm:w-auto bg-primary-container text-on-primary-container font-bold font-mono text-sm py-2 px-6 rounded-lg hover:brightness-110 transition-all active:scale-95 flex items-center justify-center gap-2" id="load-btn">
+                        <span class="material-symbols-outlined text-[18px]">play_arrow</span>
+                        Load Stream
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Video Section -->
+                    <div class="lg:col-span-8 flex flex-col gap-6">
+                        <div class="glass-panel rounded-xl overflow-hidden relative aspect-video border-white/10 shadow-lg">
+                            <div class="absolute inset-0 bg-surface-container-lowest flex items-center justify-center z-0">
+                                <span class="material-symbols-outlined text-outline text-4xl animate-pulse">videocam</span>
+                            </div>
+                            <video class="absolute inset-0 w-full h-full object-cover z-10" id="video" muted="" autoplay playsinline></video>
+                            <canvas class="absolute inset-0 w-full h-full z-20 pointer-events-none" id="overlay"></canvas>
+                            <div class="absolute top-3 left-3 z-30 bg-black/50 backdrop-blur-md rounded px-2 py-1 border border-white/10 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+                                <span class="font-mono text-xs text-white">LIVE HD</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats Section -->
+                    <div class="lg:col-span-4 flex flex-col gap-4">
+                        <h3 class="font-bold text-xl text-on-surface mb-2 border-b border-white/10 pb-2">Traffic Statistics</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- Cards -->
+                            <div class="glass-panel rounded-xl p-4 border-white/5 relative overflow-hidden">
+                                <div class="flex justify-between items-start mb-4 relative z-10">
+                                    <span class="material-symbols-outlined text-primary text-3xl">directions_bus</span>
+                                    <span class="font-mono text-xs text-on-surface-variant bg-white/5 px-2 py-1 rounded">BUS</span>
+                                </div>
+                                <div class="font-bold text-4xl text-on-surface text-glow relative z-10" id="count-bus">0</div>
+                            </div>
+                            <div class="glass-panel rounded-xl p-4 border-white/5 relative overflow-hidden">
+                                <div class="flex justify-between items-start mb-4 relative z-10">
+                                    <span class="material-symbols-outlined text-primary text-3xl">directions_car</span>
+                                    <span class="font-mono text-xs text-on-surface-variant bg-white/5 px-2 py-1 rounded">MOBIL</span>
+                                </div>
+                                <div class="font-bold text-4xl text-on-surface text-glow relative z-10" id="count-car">0</div>
+                            </div>
+                            <div class="glass-panel rounded-xl p-4 border-white/5 relative overflow-hidden">
+                                <div class="flex justify-between items-start mb-4 relative z-10">
+                                    <span class="material-symbols-outlined text-primary text-3xl">two_wheeler</span>
+                                    <span class="font-mono text-xs text-on-surface-variant bg-white/5 px-2 py-1 rounded">MOTOR</span>
+                                </div>
+                                <div class="font-bold text-4xl text-on-surface text-glow relative z-10" id="count-motorcycle">0</div>
+                            </div>
+                            <div class="glass-panel rounded-xl p-4 border-white/5 relative overflow-hidden">
+                                <div class="flex justify-between items-start mb-4 relative z-10">
+                                    <span class="material-symbols-outlined text-primary text-3xl">local_shipping</span>
+                                    <span class="font-mono text-xs text-on-surface-variant bg-white/5 px-2 py-1 rounded">TRUK</span>
+                                </div>
+                                <div class="font-bold text-4xl text-on-surface text-glow relative z-10" id="count-truck">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================== -->
+            <!-- VIEW 2: STATIC IMAGE ANALYSIS  -->
+            <!-- ============================== -->
+            <div id="view-image" class="hidden">
+                <div class="mb-6">
+                    <h2 class="font-bold text-4xl text-on-surface tracking-tight mb-1">Static Image Analysis</h2>
+                    <p class="text-lg text-on-surface-variant">Upload foto untuk mendeteksi kendaraan</p>
+                </div>
+
+                <!-- Image Upload Control -->
+                <div class="glass-panel rounded-xl p-6 mb-6 border-dashed border-2 border-outline hover:border-primary transition-colors text-center relative cursor-pointer" onclick="document.getElementById('image-upload-input').click()">
+                    <input type="file" id="image-upload-input" accept="image/*" class="hidden">
+                    <span class="material-symbols-outlined text-4xl text-primary mb-2">cloud_upload</span>
+                    <h3 class="font-bold text-xl text-on-surface">Klik untuk Upload Gambar</h3>
+                    <p class="text-sm text-on-surface-variant mt-1">Mendukung format JPG, PNG, WEBP</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Image Preview Section -->
+                    <div class="lg:col-span-8 flex flex-col gap-6">
+                        <div class="glass-panel rounded-xl overflow-hidden relative border-white/10 shadow-lg min-h-[400px] flex items-center justify-center bg-surface-container-lowest">
+                            <span id="img-placeholder" class="material-symbols-outlined text-outline text-6xl opacity-30">image</span>
+                            <!-- Container Image agar Canvas bisa menempel persis di atasnya -->
+                            <div class="relative inline-block max-w-full max-h-full">
+                                <img id="preview-img" class="block max-w-full max-h-[70vh] object-contain hidden" />
+                                <canvas id="overlay-img" class="absolute top-0 left-0 w-full h-full pointer-events-none hidden"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Image Detection Results -->
+                    <div class="lg:col-span-4 flex flex-col gap-4">
+                        <h3 class="font-bold text-xl text-on-surface mb-2 border-b border-white/10 pb-2">Detection Results</h3>
+                        <div class="glass-panel rounded-xl p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="font-bold text-lg text-on-surface">Total Kendaraan:</span>
+                                <span class="font-bold text-3xl text-primary text-glow" id="img-total">0</span>
+                            </div>
+                            
+                            <ul class="space-y-3 font-mono text-sm" id="img-details-list">
+                                <li class="text-on-surface-variant text-center py-4">Belum ada gambar yang dianalisis.</li>
+                            </ul>
+                            
+                            <button id="btn-detect-img" class="w-full mt-6 bg-primary-container text-on-primary-container font-bold py-3 rounded-lg hover:brightness-110 transition-all active:scale-95 flex items-center justify-center gap-2 hidden">
+                                <span class="material-symbols-outlined text-[20px]">search</span>
+                                Analyze Image Now
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- AI Core Scripts -->
+    <script>
+        // ==========================
+        // UI & NAVIGATION LOGIC
+        // ==========================
+        function switchView(viewName) {
+            const liveView = document.getElementById('view-live');
+            const imgView = document.getElementById('view-image');
+            const navLive = document.getElementById('nav-live');
+            const navImage = document.getElementById('nav-image');
+
+            if(viewName === 'live') {
+                liveView.classList.remove('hidden');
+                imgView.classList.add('hidden');
+                
+                navLive.classList.add('nav-active');
+                navLive.classList.remove('text-on-surface-variant', 'hover:bg-white/5');
+                
+                navImage.classList.remove('nav-active');
+                navImage.classList.add('text-on-surface-variant', 'hover:bg-white/5');
+            } else {
+                liveView.classList.add('hidden');
+                imgView.classList.remove('hidden');
+                
+                navImage.classList.add('nav-active');
+                navImage.classList.remove('text-on-surface-variant', 'hover:bg-white/5');
+                
+                navLive.classList.remove('nav-active');
+                navLive.classList.add('text-on-surface-variant', 'hover:bg-white/5');
+            }
+        }
+
+        // ==========================
+        // AI CORE LOGIC (YOLOv8)
+        // ==========================
+        let model = undefined;
+        const MODEL_PATH = 'best_web_model/model.json'; 
+        const LABELS = ['bus', 'car', 'motorcycle', 'truck']; 
+        const statusBadge = document.getElementById('status-ai');
+
+        async function initAI() {
+            try {
+                model = await tf.loadGraphModel(MODEL_PATH);
+                // Warm up
+                const dummy = tf.zeros([1, 640, 640, 3]);
+                model.execute(dummy);
+                tf.dispose(dummy);
+
+                statusBadge.innerHTML = `<span class="w-3 h-3 rounded-full bg-secondary animate-pulse shadow-[0_0_8px_theme('colors.secondary')]"></span>
+                                         <span class="font-mono text-xs text-primary tracking-wider">YOLOv8 SYSTEM ACTIVE</span>`;
+            } catch (e) {
+                statusBadge.innerHTML = `<span class="w-3 h-3 rounded-full bg-error animate-pulse shadow-[0_0_8px_theme('colors.error')]"></span>
+                                         <span class="font-mono text-xs text-error tracking-wider">MODEL ERROR</span>`;
+                console.error("Gagal memuat model:", e);
+            }
+        }
+        
+        function processOutput(output, threshold) {
+            let boxes = [];
+            for (let i = 0; i < output[0].length; i++) {
+                let classScores = [];
+                for(let c = 4; c < output.length; c++) classScores.push(output[c][i]);
+                const maxScore = Math.max(...classScores);
+                if (maxScore > threshold) {
+                    const classId = classScores.indexOf(maxScore);
+                    const [cx, cy, w, h] = [output[0][i], output[1][i], output[2][i], output[3][i]];
+                    boxes.push({ bbox: [cx - w/2, cy - h/2, w, h], class: LABELS[classId], score: maxScore });
+                }
+            }
+            return boxes;
+        }
+
+        // ==========================
+        // 1. LIVE STREAM LOGIC
+        // ==========================
+        const video = document.getElementById('video');
+        const overlay = document.getElementById('overlay');
+        const ctx = overlay.getContext('2d');
+        const urlInput = document.getElementById('stream-url-input');
+        const loadBtn = document.getElementById('load-btn');
+        let totalCounts = { bus: 0, car: 0, motorcycle: 0, truck: 0 };
+        let trackedObjects = [];
+        let hlsInstance = null;
+
+        function loadStream(url) {
+            if (!url) { alert("Silakan masukkan URL terlebih dahulu!"); return; }
+            if (hlsInstance) hlsInstance.destroy();
+
+            if (Hls.isSupported()) {
+                hlsInstance = new Hls();
+                hlsInstance.loadSource(url);
+                hlsInstance.attachMedia(video);
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play();
+                    detectFrame(); 
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.addEventListener('loadedmetadata', () => { video.play(); detectFrame(); });
+            }
+        }
+
+        loadBtn.addEventListener('click', () => loadStream(urlInput.value.trim()));
+
+        async function detectFrame() {
+            if (model && video.readyState >= 2 && !video.paused && !document.getElementById('view-live').classList.contains('hidden')) {
+                const [mWidth, mHeight] = [640, 640];
+                const predictions = await tf.tidy(() => {
+                    const img = tf.browser.fromPixels(video).resizeNearestNeighbor([mWidth, mHeight]).toFloat().div(255.0).expandDims(0);
+                    const result = model.execute(img);
+                    return processOutput(result.arraySync()[0], 0.30);
+                });
+                renderAndCount(predictions);
+            }
+            // Terus looping deteksi selama live view aktif
+            requestAnimationFrame(detectFrame);
+        }
+
+        function renderAndCount(preds) {
+            overlay.width = video.clientWidth;
+            overlay.height = video.clientHeight;
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+            const lineY = overlay.height * 0.6; 
+            const detectorRange = 80; 
+
+            ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(0, lineY); ctx.lineTo(overlay.width, lineY); ctx.stroke();
+
+            const scaleX = overlay.width / 640;
+            const scaleY = overlay.height / 640;
+
+            preds.forEach(p => {
+                const [x, y, w, h] = p.bbox;
+                const [rx, ry, rw, rh] = [x * scaleX, y * scaleY, w * scaleX, h * scaleY];
+                const [cX, cY] = [rx + (rw / 2), ry + (rh / 2)];
+
+                ctx.strokeStyle = "#10b981"; ctx.lineWidth = 3; ctx.strokeRect(rx, ry, rw, rh);
+                ctx.fillStyle = "#10b981"; ctx.font = "bold 16px Montserrat";
+                ctx.fillText(`${p.class.toUpperCase()}`, rx, ry - 10);
+                ctx.fillStyle = "#fbbf24"; ctx.beginPath(); ctx.arc(cX, cY, 6, 0, Math.PI * 2); ctx.fill();
+
+                if (cY > (lineY - detectorRange) && cY < (lineY + detectorRange)) {
+                    const isNew = !trackedObjects.some(old => Math.abs(old.x - cX) < (rw * 0.8) && old.label === p.class);
+                    if (isNew) {
+                        totalCounts[p.class]++;
+                        updateLiveUI();
+                        trackedObjects.push({ x: cX, label: p.class, time: Date.now() });
+                    }
+                }
+            });
+            trackedObjects = trackedObjects.filter(obj => Date.now() - obj.time < 800);
+        }
+
+        function updateLiveUI() {
+            Object.keys(totalCounts).forEach(key => {
+                const el = document.getElementById(`count-${key}`);
+                if (el) el.innerText = totalCounts[key];
+            });
+        }
+
+
+        // ==========================
+        // 2. IMAGE ANALYSIS LOGIC
+        // ==========================
+        const imageInput = document.getElementById('image-upload-input');
+        const previewImg = document.getElementById('preview-img');
+        const overlayImgCanvas = document.getElementById('overlay-img');
+        const imgCtx = overlayImgCanvas.getContext('2d');
+        const placeholder = document.getElementById('img-placeholder');
+        const btnDetectImg = document.getElementById('btn-detect-img');
+
+        // Handle Image Upload
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    previewImg.src = event.target.result;
+                    previewImg.classList.remove('hidden');
+                    overlayImgCanvas.classList.remove('hidden');
+                    placeholder.classList.add('hidden');
+                    btnDetectImg.classList.remove('hidden');
+                    
+                    // Bersihkan canvas & hasil lama saat gambar baru diload
+                    imgCtx.clearRect(0, 0, overlayImgCanvas.width, overlayImgCanvas.height);
+                    document.getElementById('img-total').innerText = "0";
+                    document.getElementById('img-details-list').innerHTML = `<li class="text-on-surface-variant text-center py-4">Siap untuk dianalisis.</li>`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Trigger Detection
+        btnDetectImg.addEventListener('click', async () => {
+            if (!model || !previewImg.src) return;
+            
+            const originalBtnHtml = btnDetectImg.innerHTML;
+            btnDetectImg.innerHTML = `<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> Analyzing...`;
+            
+            setTimeout(async () => {
+                const netInputSize = 640;
+                
+                // 1. TEKNIK LETTERBOXING: Menjaga rasio gambar asli
+                const imgW = previewImg.naturalWidth;
+                const imgH = previewImg.naturalHeight;
+                const scale = Math.min(netInputSize / imgW, netInputSize / imgH);
+                
+                const padX = (netInputSize - (imgW * scale)) / 2;
+                const padY = (netInputSize - (imgH * scale)) / 2;
+
+                // Buat kanvas sementara berwarna hitam
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = netInputSize;
+                tempCanvas.height = netInputSize;
+                const tCtx = tempCanvas.getContext('2d');
+                tCtx.fillStyle = 'black';
+                tCtx.fillRect(0, 0, netInputSize, netInputSize);
+                
+                // Gambar foto di tengah kanvas hitam tanpa mengubah rasionya
+                tCtx.drawImage(previewImg, padX, padY, imgW * scale, imgH * scale);
+
+                const predictions = await tf.tidy(() => {
+                    const img = tf.browser.fromPixels(tempCanvas).toFloat().div(255.0).expandDims(0);
+                    const result = model.execute(img);
+                    // Gunakan threshold rendah (0.20) agar kendaraan yang tertutup sebagian tetap masuk
+                    return processOutput(result.arraySync()[0], 0.20);
+                });
+                
+                // Kirim data padding ke fungsi render agar kotak bounding pas dengan gambar asli
+                renderImageResults(predictions, scale, padX, padY);
+                btnDetectImg.innerHTML = originalBtnHtml; 
+            }, 50);
+        });
+
+        function renderImageResults(preds, netScale, padX, padY) {
+            overlayImgCanvas.width = previewImg.clientWidth;
+            overlayImgCanvas.height = previewImg.clientHeight;
+            imgCtx.clearRect(0, 0, overlayImgCanvas.width, overlayImgCanvas.height);
+
+            // Hitung rasio tampilan CSS 'object-fit: contain' di layar pengguna
+            const displayScale = Math.min(overlayImgCanvas.width / previewImg.naturalWidth, overlayImgCanvas.height / previewImg.naturalHeight);
+            const displayPadX = (overlayImgCanvas.width - (previewImg.naturalWidth * displayScale)) / 2;
+            const displayPadY = (overlayImgCanvas.height - (previewImg.naturalHeight * displayScale)) / 2;
+            
+            let counts = { bus: 0, car: 0, motorcycle: 0, truck: 0 };
+            let filteredPreds = [];
+
+            // LOGIKA PENYARINGAN (Mencegah Deteksi Ganda)
+            preds.forEach(p => {
+                const [x, y, w, h] = p.bbox;
+                const [cX, cY] = [x + (w / 2), y + (h / 2)];
+                
+                const isDuplicate = filteredPreds.some(existing => {
+                    const [ex, ey, ew, eh] = existing.bbox;
+                    const [ecX, ecY] = [ex + (ew / 2), ey + (eh / 2)];
+                    const distance = Math.sqrt(Math.pow(cX - ecX, 2) + Math.pow(cY - ecY, 2));
+                    // Jarak toleransi diperkecil agar motor yang berdempetan tetap terdeteksi
+                    return (existing.class === p.class) && (distance < (w * 0.15));
+                });
+
+                if (!isDuplicate) filteredPreds.push(p);
+            });
+
+            // MENGGAMBAR KOTAK
+            filteredPreds.forEach(p => {
+                counts[p.class]++;
+                
+                // Mengembalikan kordinat dari ukuran 640x640 ke resolusi asli gambar, 
+                // lalu mengonversinya ke ukuran tampilan layar
+                const origX = (p.bbox[0] - padX) / netScale;
+                const origY = (p.bbox[1] - padY) / netScale;
+                const origW = p.bbox[2] / netScale;
+                const origH = p.bbox[3] / netScale;
+
+                const rx = (origX * displayScale) + displayPadX;
+                const ry = (origY * displayScale) + displayPadY;
+                const rw = origW * displayScale;
+                const rh = origH * displayScale;
+
+                // Bounding Box
+                imgCtx.strokeStyle = "#38bdf8"; 
+                imgCtx.lineWidth = 3; 
+                imgCtx.strokeRect(rx, ry, rw, rh);
+                
+                // Label Background
+                imgCtx.fillStyle = "#38bdf8";
+                const labelText = `${p.class.toUpperCase()} ${Math.round(p.score * 100)}%`;
+                imgCtx.fillRect(rx, ry - 25, imgCtx.measureText(labelText).width + 20, 25);
+
+                // Label Text
+                imgCtx.fillStyle = "#060e20"; 
+                imgCtx.font = "bold 14px JetBrains Mono";
+                imgCtx.fillText(labelText, rx + 5, ry - 7);
+            });
+
+            // Update List UI
+            const total = filteredPreds.length;
+            document.getElementById('img-total').innerText = total;
+            
+            const listEl = document.getElementById('img-details-list');
+            listEl.innerHTML = '';
+            
+            if (total === 0) {
+                listEl.innerHTML = `<li class="text-error text-center py-4">Tidak ada kendaraan terdeteksi.</li>`;
+            } else {
+                if(counts.car > 0) listEl.innerHTML += `<li class="flex justify-between border-b border-white/5 pb-2"><span>Mobil (Car)</span><span class="text-primary">${counts.car}</span></li>`;
+                if(counts.motorcycle > 0) listEl.innerHTML += `<li class="flex justify-between border-b border-white/5 pb-2"><span>Motor (Motorcycle)</span><span class="text-primary">${counts.motorcycle}</span></li>`;
+                if(counts.bus > 0) listEl.innerHTML += `<li class="flex justify-between border-b border-white/5 pb-2"><span>Bus</span><span class="text-primary">${counts.bus}</span></li>`;
+                if(counts.truck > 0) listEl.innerHTML += `<li class="flex justify-between border-b border-white/5 pb-2"><span>Truk (Truck)</span><span class="text-primary">${counts.truck}</span></li>`;
+            }
+        }
+
+        // Initialize AI on page load
+        initAI();
+    </script>
+</body>
+</html>
