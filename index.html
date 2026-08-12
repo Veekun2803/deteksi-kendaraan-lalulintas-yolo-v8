@@ -378,16 +378,35 @@
                 ctx.fillText(`${p.class.toUpperCase()}`, rx, ry - 10);
                 ctx.fillStyle = "#fbbf24"; ctx.beginPath(); ctx.arc(cX, cY, 6, 0, Math.PI * 2); ctx.fill();
 
+                // Logic Crossing (KODE BARU - Anti Dobel)
                 if (cY > (lineY - detectorRange) && cY < (lineY + detectorRange)) {
-                    const isNew = !trackedObjects.some(old => Math.abs(old.x - cX) < (rw * 0.8) && old.label === p.class);
-                    if (isNew) {
+                    
+                    // 1. Cek apakah kendaraan ini sudah ada di dalam ingatan (berdasarkan jarak X dan Y)
+                    let existingObj = trackedObjects.find(old => {
+                        // Menggunakan Math.hypot untuk menghitung jarak akurat secara diagonal
+                        const distance = Math.hypot(old.x - cX, old.y - cY);
+                        return distance < (rw * 0.8) && old.label === p.class;
+                    });
+
+                    if (existingObj) {
+                        // 2. Jika mobil masih di garis, PERBARUI posisi dan waktunya! 
+                        // Ini mencegah sistem lupa dan menghitung dobel meski mobil berhenti (macet) di pas garis.
+                        existingObj.x = cX;
+                        existingObj.y = cY;
+                        existingObj.time = Date.now();
+                    } else {
+                        // 3. Jika benar-benar objek baru, tambahkan ke hitungan
                         totalCounts[p.class]++;
                         updateLiveUI();
-                        trackedObjects.push({ x: cX, label: p.class, time: Date.now() });
+                        // Simpan titik koordinat lengkap (x dan y)
+                        trackedObjects.push({ x: cX, y: cY, label: p.class, time: Date.now() });
                     }
                 }
             });
-            trackedObjects = trackedObjects.filter(obj => Date.now() - obj.time < 800);
+            
+            // 4. Hapus kendaraan dari ingatan hanya jika sudah benar-benar keluar dari garis 
+            // atau tidak terdeteksi lagi selama 500ms
+            trackedObjects = trackedObjects.filter(obj => Date.now() - obj.time < 500);
         }
 
         function updateLiveUI() {
